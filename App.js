@@ -5,6 +5,7 @@ import { StatusBar } from 'expo-status-bar';
 
 import MessageBubble from './src/components/MessageBubble';
 import ChatInput from './src/components/ChatInput';
+import ErrorBanner from './src/components/ErrorBanner';
 import { sendMessage } from './src/services/ai';
 
 // Composant conteneur : il gère le state et le passe en props aux composants de présentation.
@@ -12,10 +13,26 @@ export default function App() {
   const [messages, setMessages] = useState([]); // [{ id, role, content }]
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null); // null = pas d'erreur
 
   const listRef = useRef(null); // référence vers la FlatList pour pouvoir la faire défiler
 
-  const handleSend = async () => {
+    // Demande une réponse à l'IA pour un historique donné
+  const askAI = async (history) => {
+    setIsLoading(true);
+    setError(null); // on efface l'erreur précédente
+    try {
+      const reply = await sendMessage(history);
+      const aiMessage = { id: Date.now().toString(), role: 'assistant', content: reply };
+      setMessages([...history, aiMessage]);
+    } catch (e) {
+      setError(e.message); // l'erreur s'affiche maintenant à l'écran
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSend = () => {
     const text = input.trim();
     if (!text) return;
 
@@ -23,17 +40,12 @@ export default function App() {
     const history = [...messages, userMessage];
     setMessages(history);
     setInput('');
-    setIsLoading(true);
+    askAI(history);
+  };
 
-    try {
-      const reply = await sendMessage(history); // tout l'historique : l'IA garde le contexte
-      const aiMessage = { id: Date.now().toString(), role: 'assistant', content: reply };
-      setMessages([...history, aiMessage]);
-    } catch (e) {
-      console.log('Erreur IA :', e.message); // affichage à l'écran : étape 6
-    } finally {
-      setIsLoading(false); // exécuté dans tous les cas, succès ou erreur
-    }
+  // Le dernier message de l'utilisateur est déjà dans la liste : on relance simplement la demande
+  const handleRetry = () => {
+    askAI(messages);
   };
 
   return (
@@ -56,6 +68,8 @@ export default function App() {
           />
 
           {isLoading && <ActivityIndicator size="small" color="#4f46e5" style={styles.loader} />}
+          {error && <ErrorBanner message={error} onRetry={handleRetry} />}
+
 
           <ChatInput
             value={input}
